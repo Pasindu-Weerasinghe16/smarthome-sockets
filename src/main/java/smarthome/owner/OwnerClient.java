@@ -9,6 +9,45 @@ import java.nio.file.Path;
 import java.util.*;
 
 public class OwnerClient {
+    private static Path parseUserPath(String raw) {
+        String s = (raw == null) ? "" : raw.trim();
+        if (s.isEmpty()) {
+            return Path.of("schedule.csv");
+        }
+
+        // If user pasted a Windows UNC path for WSL (e.g. \\wsl.localhost\\Ubuntu\\home\\USERNAME\\file.csv)
+        // convert it to a Linux path (/home/USERNAME/file.csv).
+        String wslPrefix = "\\\\wsl.localhost\\";
+        if (s.startsWith(wslPrefix)) {
+            String remainder = s.substring(wslPrefix.length());
+            int distroSep = remainder.indexOf('\\');
+            if (distroSep >= 0) {
+                remainder = remainder.substring(distroSep); // keep leading \\path
+            }
+            remainder = remainder.replace('\\', '/');
+            if (remainder.startsWith("/")) {
+                return Path.of(remainder);
+            }
+        }
+
+        // If user pasted a Windows drive path (C:\\...), map to WSL mount (/mnt/c/...).
+        if (s.length() >= 3
+                && Character.isLetter(s.charAt(0))
+                && s.charAt(1) == ':'
+                && s.charAt(2) == '\\') {
+            char drive = Character.toLowerCase(s.charAt(0));
+            String rest = s.substring(2).replace('\\', '/');
+            return Path.of("/mnt/" + drive + rest);
+        }
+
+        // Helpful fallback if user used backslashes on Linux.
+        if (s.indexOf('\\') >= 0 && s.indexOf('/') < 0) {
+            s = s.replace('\\', '/');
+        }
+
+        return Path.of(s);
+    }
+
     public static void main(String[] args) throws Exception {
         String host = (args.length > 0) ? args[0] : "127.0.0.1";
         int port = (args.length > 1) ? Integer.parseInt(args[1]) : 5000;
@@ -46,8 +85,15 @@ public class OwnerClient {
                     System.out.println("Server: " + FrameIO.readJsonFrame(in));
                 } else if ("3".equals(sel)) {
                     System.out.print("Path to CSV: ");
-                    Path path = Path.of(sc.nextLine().trim());
-                    String content = Files.readString(path);
+                    Path path = parseUserPath(sc.nextLine());
+                    String content;
+                    try {
+                        content = Files.readString(path);
+                    } catch (IOException e) {
+                        System.out.println("Could not read CSV: " + path);
+                        System.out.println("Tip: if the file is in this folder, just type: schedule.csv");
+                        continue;
+                    }
                     Message up = Message.of(MessageType.UPLOAD_SCHEDULE);
                     up.payload = Map.of("content", content);
                     FrameIO.writeJsonFrame(out, up);
