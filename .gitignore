@@ -1,0 +1,44 @@
+# Maven build output
+/target/
+
+# Logs
+/server-logs/
+*.log
+*.log.lck
+
+# OS / editor
+.DS_Store
+Thumbs.db
+
+# IntelliJ IDEA
+.idea/
+*.iml
+out/
+
+# VS Code
+.vscode/
+
+# Eclipse
+.project
+.classpath
+.settings/
+
+# NetBeans
+/nbproject/
+/nbbuild/
+/dist/
+/nbdist/
+
+# Java artifacts
+*.class
+*.jar
+*.war
+*.ear
+*.jmod
+
+# Crash logs
+hs_err_pid*
+replay_pid*
+
+# Local DB
+*.db

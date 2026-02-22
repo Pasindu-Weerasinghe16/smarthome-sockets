@@ -275,10 +275,12 @@ public class OwnerFxApp extends Application {
         root.setCenter(tabs);
         root.setRight(right);
 
-        Scene scene = new Scene(root, 1100, 700);
+        Scene scene = new Scene(root, 1400, 850);
         String css = getClass().getResource("/ownerfx.css") == null ? null : getClass().getResource("/ownerfx.css").toExternalForm();
         if (css != null) scene.getStylesheets().add(css);
         stage.setScene(scene);
+        stage.setMinWidth(1200);
+        stage.setMinHeight(750);
 
         wireActions(stage);
         startDeviceConsolePolling();

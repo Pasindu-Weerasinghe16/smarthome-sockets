@@ -1,6 +1,23 @@
-# ISO_INSTANT,DEVICE_ID,ACTION
-# Use +N for N seconds from now (relative), or ISO timestamp for absolute time
-+30,LIGHT1,ON
-+60,LIGHT1,OFF
-+45,FAN1,ON
-+90,FAN1,OFF
+# Demo schedule (runs within ~1 minute)
+# Format: TIMESTAMP,DEVICE_ID,ACTION
+# Recommended timestamps:
+# - Relative from now: +60 or 5s / 10s / 1m
+# - Local datetime (server time): 2026-02-22 18:30
+
+# Start devices (make sure these DeviceClients are running):
+# LIGHT1, LIGHT2, FAN1, SOCKET1, AC1
+
+5s,LIGHT1,ON
+10s,LIGHT1,OFF
+
+12s,LIGHT2,ON
+18s,LIGHT2,OFF
+
+20s,FAN1,ON
+28s,FAN1,OFF
+
+30s,SOCKET1,ON
+40s,SOCKET1,OFF
+
+45s,AC1,ON
+55s,AC1,OFF
