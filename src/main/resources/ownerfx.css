@@ -1,0 +1,55 @@
+/* Minimal dark UI styling (JavaFX) */
+.root {
+    -fx-base: #0f141b;
+    -fx-background: #0f141b;
+    -fx-control-inner-background: #111a24;
+    -fx-accent: #2f6fed;
+    -fx-focus-color: #2f6fed;
+    -fx-faint-focus-color: rgba(47,111,237,0.15);
+}
+
+.label {
+    -fx-text-fill: #d8e1ee;
+}
+
+.text-field, .combo-box-base, .list-view, .text-area {
+    -fx-background-color: #111a24;
+    -fx-text-fill: #d8e1ee;
+    -fx-prompt-text-fill: #708399;
+}
+
+.button {
+    -fx-background-color: #1a2534;
+    -fx-text-fill: #d8e1ee;
+    -fx-background-radius: 8;
+    -fx-padding: 8 12;
+}
+
+.button:hover {
+    -fx-background-color: #223147;
+}
+
+.button:default {
+    -fx-background-color: #2f6fed;
+}
+
+.tab-pane .tab-header-area {
+    -fx-background-color: #0f141b;
+}
+
+.tab-pane .tab {
+    -fx-background-color: #101925;
+}
+
+.tab-pane .tab:selected {
+    -fx-background-color: #162235;
+}
+
+.list-view .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: #d8e1ee;
+}
+
+.list-view .list-cell:filled:selected {
+    -fx-background-color: rgba(47,111,237,0.25);
+}

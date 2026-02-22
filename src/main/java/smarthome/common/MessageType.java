@@ -8,6 +8,7 @@ public enum MessageType {
     DEVICES,
     COMMAND,
     STATUS,
+    DEVICE_LOG,
     UPLOAD_SCHEDULE,
     SCHEDULE_ACCEPTED
 }

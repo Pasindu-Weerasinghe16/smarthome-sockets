@@ -3,6 +3,7 @@ package smarthome.server;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.file.Path;
 import java.time.ZoneId;
 import java.util.concurrent.*;
 import java.util.logging.LogManager;
@@ -14,19 +15,33 @@ public class HomeServer {
 
     private final int port;
     private final DeviceRegistry registry = new DeviceRegistry();
+    private final OwnerHub ownerHub = new OwnerHub();
     private final ExecutorService clientPool = Executors.newCachedThreadPool();
     private final ExecutorService writerPool = Executors.newFixedThreadPool(8);
     private final ScheduledExecutorService schedulerPool = Executors.newScheduledThreadPool(4);
     private final CommandScheduler scheduler = new CommandScheduler(schedulerPool, registry);
+    private final Persistence persistence;
 
-    public HomeServer(int port) { this.port = port; }
+    public HomeServer(int port, Persistence persistence) {
+        this.port = port;
+        this.persistence = persistence;
+    }
 
     public void start() throws IOException {
+        // Best-effort cleanup and replay of persisted schedules
+        try {
+            long now = System.currentTimeMillis();
+            persistence.cleanupScheduleOlderThan(now - 24L * 3600L * 1000L);
+            scheduler.schedule(persistence.loadPendingScheduleEntries(now));
+        } catch (RuntimeException e) {
+            log.warning(() -> "Persistence not available: " + e.getMessage());
+        }
+
         try (ServerSocket ss = new ServerSocket(port)) {
             log.info(() -> "HomeServer listening on port " + port + " (" + SERVER_ZONE + ")");
             while (true) {
                 Socket s = ss.accept();
-                clientPool.submit(new ClientSession(s, registry, scheduler, writerPool));
+                clientPool.submit(new ClientSession(s, registry, scheduler, writerPool, persistence, ownerHub));
             }
         }
     }
@@ -36,6 +51,8 @@ public class HomeServer {
             if (is != null) LogManager.getLogManager().readConfiguration(is);
         }
         int port = (args.length > 0) ? Integer.parseInt(args[0]) : 5000;
-        new HomeServer(port).start();
+        Persistence p = new Persistence(Path.of("smarthome.db"));
+        p.init();
+        new HomeServer(port, p).start();
     }
 }

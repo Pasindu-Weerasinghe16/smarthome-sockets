@@ -7,6 +7,13 @@ import java.net.Socket;
 import java.util.Map;
 
 public class DeviceClient {
+    private static void sendDeviceLog(DataOutputStream out, String deviceId, String line) throws IOException {
+        Message log = Message.of(MessageType.DEVICE_LOG);
+        log.deviceId = deviceId;
+        log.payload = Map.of("deviceId", deviceId, "line", line);
+        FrameIO.writeJsonFrame(out, log);
+    }
+
     public static void main(String[] args) throws Exception {
         if (args.length < 1) {
             System.out.println("Usage: DeviceClient <DEVICE_ID> [host] [port]");
@@ -30,6 +37,11 @@ public class DeviceClient {
             String ack = FrameIO.readJsonFrame(in);
             System.out.println("Server: " + ack);
 
+            try {
+                sendDeviceLog(out, deviceId, "Connected and registered");
+            } catch (IOException ignored) {
+            }
+
             while (true) {
                 Message m = Json.fromJson(FrameIO.readJsonFrame(in), Message.class);
                 if (m.type == MessageType.COMMAND) {
@@ -39,7 +51,12 @@ public class DeviceClient {
                     status.deviceId = deviceId;
                     status.payload = Map.of("deviceId", deviceId, "state", result, "msg", "OK");
                     FrameIO.writeJsonFrame(out, status);
-                    System.out.println("Executed " + action + ", state=" + result);
+                    String line = "Executed " + action + ", state=" + result;
+                    System.out.println(line);
+                    try {
+                        sendDeviceLog(out, deviceId, line);
+                    } catch (IOException ignored) {
+                    }
                 }
             }
         }

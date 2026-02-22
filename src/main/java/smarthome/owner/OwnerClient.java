@@ -6,6 +6,7 @@ import java.io.*;
 import java.net.Socket;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.*;
 
 public class OwnerClient {
@@ -15,8 +16,7 @@ public class OwnerClient {
             return Path.of("schedule.csv");
         }
 
-        // If user pasted a Windows UNC path for WSL (e.g. \\wsl.localhost\\Ubuntu\\home\\USERNAME\\file.csv)
-        // convert it to a Linux path (/home/USERNAME/file.csv).
+        // If user pasted a Windows UNC path that points into WSL, convert it to a Linux path.
         String wslPrefix = "\\\\wsl.localhost\\";
         if (s.startsWith(wslPrefix)) {
             String remainder = s.substring(wslPrefix.length());
@@ -48,6 +48,38 @@ public class OwnerClient {
         return Path.of(s);
     }
 
+    private static Process startLocalDevice(String deviceId, String host, int port) throws IOException {
+        String classpath = System.getProperty("java.class.path");
+        String javaBin = Path.of(System.getProperty("java.home"), "bin", "java").toString();
+
+        Path logDir = Path.of("server-logs");
+        try {
+            Files.createDirectories(logDir);
+        } catch (IOException ignored) {
+            // best-effort
+        }
+        Path logFile = logDir.resolve("device-" + deviceId + ".log");
+        if (!Files.exists(logFile)) {
+            try {
+                Files.writeString(logFile, "", StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+            } catch (IOException ignored) {
+                // best-effort
+            }
+        }
+
+        ProcessBuilder pb = new ProcessBuilder(
+                javaBin,
+                "-cp", classpath,
+                "smarthome.device.DeviceClient",
+                deviceId,
+                host,
+                String.valueOf(port)
+        );
+        pb.redirectErrorStream(true);
+        pb.redirectOutput(ProcessBuilder.Redirect.appendTo(logFile.toFile()));
+        return pb.start();
+    }
+
     public static void main(String[] args) throws Exception {
         String host = (args.length > 0) ? args[0] : "127.0.0.1";
         int port = (args.length > 1) ? Integer.parseInt(args[1]) : 5000;
@@ -56,6 +88,8 @@ public class OwnerClient {
              DataInputStream in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
              DataOutputStream out = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
              Scanner sc = new Scanner(System.in)) {
+
+            List<Process> startedDevices = new ArrayList<>();
 
             Message reg = Message.of(MessageType.REGISTER);
             reg.role = "owner";
@@ -67,6 +101,7 @@ public class OwnerClient {
                 System.out.println("1) List devices");
                 System.out.println("2) Send command (ON/OFF/STATUS)");
                 System.out.println("3) Upload schedule CSV");
+                System.out.println("5) Create (start) simulated device");
                 System.out.println("4) Exit");
                 System.out.print("Select: ");
                 String sel = sc.nextLine().trim();
@@ -98,8 +133,28 @@ public class OwnerClient {
                     up.payload = Map.of("content", content);
                     FrameIO.writeJsonFrame(out, up);
                     System.out.println("Server: " + FrameIO.readJsonFrame(in));
+                } else if ("5".equals(sel)) {
+                    System.out.print("New Device Id: ");
+                    String devId = sc.nextLine().trim();
+                    if (devId.isEmpty()) {
+                        System.out.println("Device Id cannot be empty.");
+                        continue;
+                    }
+                    try {
+                        Process p = startLocalDevice(devId, host, port);
+                        startedDevices.add(p);
+                        System.out.println("Started device '" + devId + "' (pid=" + p.pid() + ")");
+                        System.out.println("Logs: server-logs/device-" + devId + ".log");
+                    } catch (IOException e) {
+                        System.out.println("Failed to start device: " + e.getMessage());
+                    }
                 } else if ("4".equals(sel)) {
                     System.out.println("Bye.");
+                    for (Process p : startedDevices) {
+                        if (p.isAlive()) {
+                            p.destroy();
+                        }
+                    }
                     break;
                 } else {
                     System.out.println("Invalid selection.");
