@@ -56,6 +56,53 @@ This starts: `smarthome.owner.OwnerFxApp`
 3) Upload schedule CSV  →  type: schedule.csv
 4) Exit
 5) Create (start) simulated device
+6) View usage stats (all devices — all-time ON + today ON)
+7) Query ON-time for a device on a specific day (YYYY-MM-DD)
+```
+
+---
+
+## Device ON-Time Tracking (main feature)
+
+The server records every state change (ON / OFF) in a local SQLite database (`smarthome.db`).
+This allows you to ask: **"how long was LIGHT1 ON on Feb 23?"** — even after a server restart.
+
+### How it works
+- Every `STATUS` message a device sends is stored in `device_state_events`.
+- When a device **disconnects while still ON**, a synthetic OFF event is inserted at the disconnect time (session counted up to disconnect, not beyond — "stop at disconnect" rule).
+- "Today" is defined by the **server's local timezone** (`ZoneId.systemDefault()`).
+
+### JavaFX GUI — Usage tab
+Open the **Usage** tab to see a table of all known devices:
+
+| Column      | Meaning                                               |
+|-------------|-------------------------------------------------------|
+| Device      | Device ID                                             |
+| Live        | Whether currently connected                           |
+| State       | Last known state (ON / OFF / …)                       |
+| All-time    | Total ON duration since first recorded state change   |
+| Today       | ON duration since local midnight (server timezone)    |
+| Current ON  | Duration of the currently open ON session             |
+| Last Seen   | Timestamp of the last STATUS received                 |
+
+Click **Refresh Usage Stats** (or **Refresh** on the left panel) to reload the table.
+
+### JavaFX GUI — Schedule tab (per-day query)
+1. Select a device from the left panel.
+2. Choose a date using the calendar date-picker in the Schedule tab.
+3. Click **Get Usage for Selected Date**.
+
+The label below the button will show e.g. `LIGHT1 was ON for 1h 4m 30s on 2026-02-23 (server timezone)`.
+
+### CLI — options 6 and 7
+```
+6) View usage stats (all devices)
+   → prints a table: Device | Live | State | All-time ON | Today ON
+
+7) Query ON-time for device on a specific day
+   Device Id: LIGHT1
+   Date [YYYY-MM-DD, blank = today]: 2026-02-23
+   → LIGHT1 was ON for 1h 4m 30s on 2026-02-23
 ```
 
 ### Schedule CSV format (`schedule.csv`)

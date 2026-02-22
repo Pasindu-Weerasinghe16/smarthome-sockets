@@ -93,6 +93,14 @@ public class OwnerFxApp extends Application {
 
     private TextArea logArea;
 
+    // Usage tab
+    private TextArea usageArea;
+    private Button  refreshStatsBtn;
+
+    // Schedule tab – usage summary for selected device+date
+    private Label  usageSummaryLabel;
+    private Button getUsageBtn;
+
     @Override
     public void start(Stage stage) {
         stage.setTitle("Smart Home - Owner UI");
@@ -126,6 +134,25 @@ public class OwnerFxApp extends Application {
                 String state = deviceState.get(item);
                 setText(state == null ? item : (item + "  [" + state + "]"));
             }
+        });
+
+        // Right-click context menu on the device list
+        ContextMenu deviceMenu = new ContextMenu();
+        MenuItem menuClearHistory = new MenuItem("Clear usage history");
+        MenuItem menuDelete       = new MenuItem("Delete from records");
+        deviceMenu.getItems().addAll(menuClearHistory, new SeparatorMenuItem(), menuDelete);
+        deviceList.setContextMenu(deviceMenu);
+        menuClearHistory.setOnAction(e -> {
+            String sel = deviceList.getSelectionModel().getSelectedItem();
+            if (sel == null) return;
+            deviceManageRequest(MessageType.CLEAR_DEVICE_HISTORY, sel,
+                    "Clear usage history of '" + sel + "'?");
+        });
+        menuDelete.setOnAction(e -> {
+            String sel = deviceList.getSelectionModel().getSelectedItem();
+            if (sel == null) return;
+            deviceManageRequest(MessageType.DELETE_DEVICE, sel,
+                    "Delete '" + sel + "' from all records? This cannot be undone.");
         });
         refreshBtn = new Button("Refresh");
         refreshBtn.setMaxWidth(Double.MAX_VALUE);
@@ -211,6 +238,11 @@ public class OwnerFxApp extends Application {
         );
         schedulePreview.setPrefRowCount(10);
 
+        usageSummaryLabel = new Label("Select a device from the left panel and a date here, then click 'Get Usage'.");
+        usageSummaryLabel.setWrapText(true);
+        getUsageBtn = new Button("Get Usage for Selected Date");
+        getUsageBtn.setMaxWidth(Double.MAX_VALUE);
+
         VBox scheduleTab = new VBox(10,
             new Label("Schedule CSV"),
             csvRow,
@@ -220,7 +252,11 @@ public class OwnerFxApp extends Application {
             builderRow1,
             builderRow2,
             builderRow3,
-            schedulePreview
+            schedulePreview,
+            new Separator(),
+            new Label("Device ON-Time for Selected Date"),
+            usageSummaryLabel,
+            getUsageBtn
         );
         scheduleTab.setPadding(new Insets(12));
         VBox.setVgrow(schedulePreview, Priority.ALWAYS);
@@ -253,11 +289,26 @@ public class OwnerFxApp extends Application {
         consoleTab.setPadding(new Insets(12));
         VBox.setVgrow(deviceConsoleArea, Priority.ALWAYS);
 
+        usageArea = new TextArea();
+        usageArea.setEditable(false);
+        usageArea.setWrapText(false);
+        usageArea.setStyle("-fx-font-family: monospace; -fx-font-size: 12px;");
+        refreshStatsBtn = new Button("Refresh Usage Stats");
+        refreshStatsBtn.setMaxWidth(Double.MAX_VALUE);
+        VBox usageTab = new VBox(10,
+            new Label("Device Usage Statistics  (all-time ON  |  today ON  |  current session)"),
+            refreshStatsBtn,
+            usageArea
+        );
+        usageTab.setPadding(new Insets(12));
+        VBox.setVgrow(usageArea, Priority.ALWAYS);
+
         TabPane tabs = new TabPane();
         tabs.getTabs().add(tab("Command", commandTab));
         tabs.getTabs().add(tab("Schedule", scheduleTab));
         tabs.getTabs().add(tab("Create Device", createTab));
         tabs.getTabs().add(tab("Device Console", consoleTab));
+        tabs.getTabs().add(tab("Usage", usageTab));
         tabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
 
         logArea = new TextArea();
@@ -322,6 +373,8 @@ public class OwnerFxApp extends Application {
         startDeviceBtn.setOnAction(e -> startDevice());
 
         consoleDeviceBox.setOnAction(e -> refreshDeviceConsoleView());
+        refreshStatsBtn.setOnAction(e -> refreshDevices());
+        getUsageBtn.setOnAction(e -> getUsageForDate());
 
         // Small usability: Enter to connect / send
         hostField.setOnKeyPressed(e -> {
@@ -415,27 +468,47 @@ public class OwnerFxApp extends Application {
         }
 
         refreshBtn.setDisable(true);
-        request(Message.of(MessageType.LIST_DEVICES))
+        request(Message.of(MessageType.GET_DEVICE_STATS))
                 .whenComplete((resp, err) -> Platform.runLater(() -> {
                     refreshBtn.setDisable(false);
                     if (err != null) {
                         log("Refresh failed: " + err.getMessage());
                         return;
                     }
-                    log("Server: " + Json.toJson(resp));
-                    Object devices = resp.payload == null ? null : resp.payload.get("devices");
-                    deviceList.getItems().clear();
-                    if (devices instanceof List<?> list) {
-                        for (Object o : list) deviceList.getItems().add(String.valueOf(o));
+
+                    Object statsObj = resp.payload == null ? null : resp.payload.get("stats");
+                    List<String> ids = new ArrayList<>();
+                    List<Map<String, Object>> statsList = new ArrayList<>();
+
+                    if (statsObj instanceof List<?> rawList) {
+                        for (Object item : rawList) {
+                            if (item instanceof Map<?, ?> rawMap) {
+                                Map<String, Object> row = new LinkedHashMap<>();
+                                rawMap.forEach((k, v) -> row.put(String.valueOf(k), v));
+                                statsList.add(row);
+                                Object idObj = rawMap.get("deviceId");
+                                if (idObj != null) {
+                                    String id = String.valueOf(idObj);
+                                    ids.add(id);
+                                    Object stObj = rawMap.get("state");
+                                    if (stObj != null) deviceState.put(id, String.valueOf(stObj));
+                                }
+                            }
+                        }
                     }
 
-                    // Keep schedule device dropdown in sync (but allow custom entry too)
-                    Set<String> all = new LinkedHashSet<>(deviceList.getItems());
+                    deviceList.getItems().setAll(ids);
+                    deviceList.refresh();
+
+                    // Keep schedule device dropdown in sync
+                    Set<String> all = new LinkedHashSet<>(ids);
                     String current = scheduleDeviceBox.getEditor().getText();
                     scheduleDeviceBox.getItems().setAll(all);
                     if (current != null && !current.isBlank()) {
                         scheduleDeviceBox.getEditor().setText(current);
                     }
+
+                    refreshUsageTab(statsList);
                 }));
     }
 
@@ -888,6 +961,129 @@ public class OwnerFxApp extends Application {
         pb.redirectErrorStream(true);
         pb.redirectOutput(ProcessBuilder.Redirect.appendTo(logFile.toFile()));
         return pb.start();
+    }
+
+    // ── Device delete / clear history ─────────────────────────────────────────────
+
+    /**
+     * Shows a confirmation dialog, then sends DELETE_DEVICE or CLEAR_DEVICE_HISTORY
+     * and refreshes the device list on success.
+     */
+    private void deviceManageRequest(MessageType type, String deviceId, String confirmText) {
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION, confirmText,
+                ButtonType.OK, ButtonType.CANCEL);
+        confirm.setHeaderText(null);
+        confirm.setTitle(type == MessageType.DELETE_DEVICE ? "Delete device" : "Clear history");
+        confirm.showAndWait().ifPresent(btn -> {
+            if (btn != ButtonType.OK) return;
+            if (!isConnected()) { log("Not connected"); return; }
+            Message m = Message.of(type);
+            m.payload = Map.of("deviceId", deviceId);
+            request(m).whenComplete((resp, err) -> Platform.runLater(() -> {
+                if (err != null) {
+                    log("Request failed: " + err.getMessage());
+                    return;
+                }
+                if (resp.type == MessageType.ACK) {
+                    if (type == MessageType.DELETE_DEVICE) {
+                        deviceList.getItems().remove(deviceId);
+                        deviceState.remove(deviceId);
+                        log("Deleted device: " + deviceId);
+                    } else {
+                        log("Cleared usage history for: " + deviceId);
+                    }
+                    refreshDevices(); // reload stats
+                } else {
+                    log("Server: " + Json.toJson(resp));
+                }
+            }));
+        });
+    }
+
+    // ── Device usage queries ────────────────────────────────────────────────
+
+    /**
+     * Requests ON-time for the currently selected device on the date chosen in
+     * the schedule's DatePicker, then shows the result in the schedule tab.
+     */
+    private void getUsageForDate() {
+        if (!isConnected()) { log("Not connected"); return; }
+        String dev = deviceList.getSelectionModel().getSelectedItem();
+        if (dev == null || dev.isBlank()) {
+            log("Select a device from the left panel first");
+            return;
+        }
+        LocalDate date = datePicker.getValue();
+        if (date == null) { log("Pick a date in the Schedule tab"); return; }
+
+        Message m = Message.of(MessageType.GET_DEVICE_USAGE);
+        m.payload = Map.of("deviceId", dev, "date", date.toString());
+        request(m).whenComplete((resp, err) -> Platform.runLater(() -> {
+            if (err != null) { log("Usage query failed: " + err.getMessage()); return; }
+            if (resp.type == MessageType.DEVICE_USAGE && resp.payload != null) {
+                Object onMsObj = resp.payload.get("onMs");
+                long onMs = onMsObj instanceof Number n ? n.longValue() : 0L;
+                String formatted = formatDuration(onMs);
+                usageSummaryLabel.setText(dev + " was ON for " + formatted + " on " + date
+                        + "  (server timezone)");
+                log("Usage: " + dev + " on " + date + " = " + formatted);
+            }
+        }));
+    }
+
+    /** Formats a millisecond duration as e.g. "1h 4m 30s". */
+    private static String formatDuration(long ms) {
+        if (ms <= 0) return "0s";
+        long secs  = ms / 1000;
+        long mins  = secs / 60;  secs %= 60;
+        long hours = mins / 60;  mins %= 60;
+        StringBuilder sb = new StringBuilder();
+        if (hours > 0) sb.append(hours).append("h ");
+        if (mins  > 0) sb.append(mins).append("m ");
+        sb.append(secs).append("s");
+        return sb.toString().trim();
+    }
+
+    /** Fills the Usage tab text area from the stats list returned by GET_DEVICE_STATS. */
+    private void refreshUsageTab(List<Map<String, Object>> statsList) {
+        if (statsList == null || statsList.isEmpty()) {
+            usageArea.setText("No devices recorded yet. Connect a device first.");
+            return;
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append(String.format("%-14s %-5s %-7s %10s %10s %12s  %s%n",
+                "Device", "Live", "State", "All-time", "Today", "Current ON", "Last Seen"));
+        sb.append("-".repeat(80)).append("\n");
+        for (Map<String, Object> row : statsList) {
+            String  id        = mapStr(row, "deviceId");
+            boolean conn      = Boolean.TRUE.equals(row.get("connected"));
+            String  state     = mapStr(row, "state");
+            long    totalOnMs = mapLong(row, "totalOnMs");
+            long    todayOnMs = mapLong(row, "todayOnMs");
+            long    curOnMs   = mapLong(row, "currentOnMs");
+            long    lastMs    = mapLong(row, "lastSeenMs");
+            String  lastStr   = lastMs == 0 ? "never"
+                    : new java.util.Date(lastMs).toString().substring(4, 19);
+            sb.append(String.format("%-14s %-5s %-7s %10s %10s %12s  %s%n",
+                    id,
+                    conn  ? "ON" : "off",
+                    state == null ? "?" : state,
+                    formatDuration(totalOnMs),
+                    formatDuration(todayOnMs),
+                    curOnMs > 0 ? formatDuration(curOnMs) : "-",
+                    lastStr));
+        }
+        usageArea.setText(sb.toString());
+    }
+
+    private static String mapStr(Map<String, Object> m, String key) {
+        Object v = m == null ? null : m.get(key);
+        return v == null ? null : String.valueOf(v);
+    }
+
+    private static long mapLong(Map<String, Object> m, String key) {
+        Object v = m == null ? null : m.get(key);
+        return v instanceof Number n ? n.longValue() : 0L;
     }
 
     public static void main(String[] args) {

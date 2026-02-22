@@ -4,6 +4,9 @@ import smarthome.common.*;
 
 import java.io.*;
 import java.net.Socket;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -132,6 +135,61 @@ public class ClientSession implements Runnable {
                         }
                         scheduler.schedule(entries);
                         send(MessageType.SCHEDULE_ACCEPTED, Map.of("count", entries.size()));
+                    }
+                    case GET_DEVICE_STATS -> {
+                        List<Persistence.DeviceStats> stats = persistence.getAllDeviceStats(
+                                System.currentTimeMillis(), HomeServer.SERVER_ZONE);
+                        List<Map<String, Object>> rows = new ArrayList<>();
+                        for (Persistence.DeviceStats s : stats) {
+                            Map<String, Object> row = new LinkedHashMap<>();
+                            row.put("deviceId",           s.deviceId());
+                            row.put("connected",          s.connected());
+                            row.put("state",              s.state());
+                            row.put("totalOnMs",          s.totalOnMs());
+                            row.put("todayOnMs",          s.todayOnMs());
+                            row.put("currentOnMs",        s.currentOnMs());
+                            row.put("lastSeenMs",         s.lastSeenMs());
+                            row.put("lastStateChangeMs",  s.lastStateChangeMs());
+                            rows.add(row);
+                        }
+                        send(MessageType.DEVICE_STATS, Map.of("stats", rows));
+                    }
+                    case GET_DEVICE_USAGE -> {
+                        String devId   = str(m.payload, "deviceId");
+                        String dateStr = str(m.payload, "date");
+                        if (devId == null || dateStr == null) {
+                            send(MessageType.ERROR, Map.of("msg", "deviceId and date required"));
+                            break;
+                        }
+                        LocalDate date;
+                        try {
+                            date = LocalDate.parse(dateStr);
+                        } catch (Exception ex) {
+                            send(MessageType.ERROR, Map.of("msg", "Invalid date: " + dateStr));
+                            break;
+                        }
+                        long onMs = persistence.getDeviceOnTimeForDate(
+                                devId, date, HomeServer.SERVER_ZONE);
+                        send(MessageType.DEVICE_USAGE,
+                                Map.of("deviceId", devId, "date", dateStr, "onMs", onMs));
+                    }
+                    case DELETE_DEVICE -> {
+                        String devId = str(m.payload, "deviceId");
+                        if (devId == null) {
+                            send(MessageType.ERROR, Map.of("msg", "deviceId required"));
+                            break;
+                        }
+                        persistence.deleteDevice(devId);
+                        send(MessageType.ACK, Map.of("msg", "DELETED", "deviceId", devId));
+                    }
+                    case CLEAR_DEVICE_HISTORY -> {
+                        String devId = str(m.payload, "deviceId");
+                        if (devId == null) {
+                            send(MessageType.ERROR, Map.of("msg", "deviceId required"));
+                            break;
+                        }
+                        persistence.clearDeviceHistory(devId);
+                        send(MessageType.ACK, Map.of("msg", "HISTORY_CLEARED", "deviceId", devId));
                     }
                     default -> send(MessageType.ERROR, Map.of("msg", "Unsupported type: " + m.type));
                 }

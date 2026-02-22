@@ -7,6 +7,7 @@ import java.net.Socket;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.time.LocalDate;
 import java.util.*;
 
 public class OwnerClient {
@@ -80,6 +81,22 @@ public class OwnerClient {
         return pb.start();
     }
 
+    private static long toLong(Object v) {
+        return v instanceof Number n ? n.longValue() : 0L;
+    }
+
+    private static String fmtMs(long ms) {
+        if (ms <= 0) return "0s";
+        long s = ms / 1000;
+        long m = s / 60; s %= 60;
+        long h = m / 60; m %= 60;
+        StringBuilder sb = new StringBuilder();
+        if (h > 0) sb.append(h).append("h ");
+        if (m > 0) sb.append(m).append("m ");
+        sb.append(s).append("s");
+        return sb.toString().trim();
+    }
+
     public static void main(String[] args) throws Exception {
         String host = (args.length > 0) ? args[0] : "127.0.0.1";
         int port = (args.length > 1) ? Integer.parseInt(args[1]) : 5000;
@@ -102,6 +119,8 @@ public class OwnerClient {
                 System.out.println("2) Send command (ON/OFF/STATUS)");
                 System.out.println("3) Upload schedule CSV");
                 System.out.println("5) Create (start) simulated device");
+                System.out.println("6) View usage stats (all devices)");
+                System.out.println("7) Query ON-time for device on a specific day");
                 System.out.println("4) Exit");
                 System.out.print("Select: ");
                 String sel = sc.nextLine().trim();
@@ -147,6 +166,57 @@ public class OwnerClient {
                         System.out.println("Logs: server-logs/device-" + devId + ".log");
                     } catch (IOException e) {
                         System.out.println("Failed to start device: " + e.getMessage());
+                    }
+                } else if ("6".equals(sel)) {
+                    FrameIO.writeJsonFrame(out, Message.of(MessageType.GET_DEVICE_STATS));
+                    String raw = FrameIO.readJsonFrame(in);
+                    Message resp = Json.fromJson(raw, Message.class);
+                    Object statsObj = resp.payload == null ? null : resp.payload.get("stats");
+                    if (statsObj instanceof List<?> list) {
+                        System.out.printf("%-14s %-5s %-6s %10s %10s%n",
+                                "Device", "Live", "State", "All-time", "Today");
+                        System.out.println("-".repeat(50));
+                        for (Object item : list) {
+                            if (item instanceof Map<?, ?> row) {
+                                Object idO    = row.get("deviceId");
+                                Object stateO = row.get("state");
+                                String id     = idO    != null ? String.valueOf(idO)    : "?";
+                                boolean conn  = Boolean.TRUE.equals(row.get("connected"));
+                                String  state = stateO != null ? String.valueOf(stateO) : "?";
+                                long    total = toLong(row.get("totalOnMs"));
+                                long    today = toLong(row.get("todayOnMs"));
+                                System.out.printf("%-14s %-5s %-6s %10s %10s%n",
+                                        id, conn ? "ON" : "off", state,
+                                        fmtMs(total), fmtMs(today));
+                            }
+                        }
+                    } else {
+                        System.out.println("Server: " + raw);
+                    }
+                } else if ("7".equals(sel)) {
+                    System.out.print("Device Id: ");
+                    String devId = sc.nextLine().trim();
+                    System.out.print("Date [YYYY-MM-DD, blank = today]: ");
+                    String dateInput = sc.nextLine().trim();
+                    String dateStr;
+                    try {
+                        dateStr = dateInput.isBlank()
+                                ? LocalDate.now().toString()
+                                : LocalDate.parse(dateInput).toString();
+                    } catch (Exception e) {
+                        System.out.println("Invalid date: " + dateInput);
+                        continue;
+                    }
+                    Message req = Message.of(MessageType.GET_DEVICE_USAGE);
+                    req.payload = Map.of("deviceId", devId, "date", dateStr);
+                    FrameIO.writeJsonFrame(out, req);
+                    String raw = FrameIO.readJsonFrame(in);
+                    Message resp = Json.fromJson(raw, Message.class);
+                    if (resp.type == MessageType.DEVICE_USAGE && resp.payload != null) {
+                        long onMs = toLong(resp.payload.get("onMs"));
+                        System.out.println(devId + " was ON for " + fmtMs(onMs) + " on " + dateStr);
+                    } else {
+                        System.out.println("Server: " + raw);
                     }
                 } else if ("4".equals(sel)) {
                     System.out.println("Bye.");
