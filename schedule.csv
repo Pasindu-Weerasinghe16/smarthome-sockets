@@ -1,0 +1,6 @@
+# ISO_INSTANT,DEVICE_ID,ACTION
+# Use +N for N seconds from now (relative), or ISO timestamp for absolute time
++30,LIGHT1,ON
++60,LIGHT1,OFF
++45,FAN1,ON
++90,FAN1,OFF
