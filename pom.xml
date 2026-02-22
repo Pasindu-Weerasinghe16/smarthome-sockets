@@ -26,10 +26,13 @@
     </dependency>
 
     <!-- JavaFX (for optional GUI Owner client) -->
+    <!-- Kept as 'provided' so the fat jar stays clean (JavaFX modular jars
+         corrupt the assembly when merged). Use 'mvn javafx:run' for the GUI. -->
     <dependency>
       <groupId>org.openjfx</groupId>
       <artifactId>javafx-controls</artifactId>
       <version>${javafx.version}</version>
+      <scope>provided</scope>
     </dependency>
   </dependencies>
   <build>

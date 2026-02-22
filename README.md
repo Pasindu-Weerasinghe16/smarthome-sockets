@@ -135,3 +135,19 @@ smarthome-sockets/
     └── resources/
         └── logging.properties
 ```
+cd ~/OS_Project/smarthome-sockets
+
+# Rebuild once after this change:
+mvn -q -DskipTests package
+
+# Terminal 1 – Server
+java -cp target/smarthome-sockets-1.0.0-jar-with-dependencies.jar smarthome.server.HomeServer 5000
+
+# Terminal 2 – Device
+java -cp target/smarthome-sockets-1.0.0-jar-with-dependencies.jar smarthome.device.DeviceClient LIGHT_01
+
+# Terminal 3 – CLI owner
+java -cp target/smarthome-sockets-1.0.0-jar-with-dependencies.jar smarthome.owner.OwnerClient
+
+# GUI owner (JavaFX – uses Maven classpath, not the fat jar)
+mvn -q javafx:run
