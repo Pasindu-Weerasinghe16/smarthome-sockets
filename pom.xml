@@ -26,13 +26,17 @@
     </dependency>
 
     <!-- JavaFX (for optional GUI Owner client) -->
-    <!-- Kept as 'provided' so the fat jar stays clean (JavaFX modular jars
-         corrupt the assembly when merged). Use 'mvn javafx:run' for the GUI. -->
+    <!-- Scope is 'compile' so mvn javafx:run resolves the native jars.
+         The assembly plugin excludes org.openjfx to keep the fat jar clean. -->
     <dependency>
       <groupId>org.openjfx</groupId>
       <artifactId>javafx-controls</artifactId>
       <version>${javafx.version}</version>
-      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.openjfx</groupId>
+      <artifactId>javafx-fxml</artifactId>
+      <version>${javafx.version}</version>
     </dependency>
   </dependencies>
   <build>
@@ -51,9 +55,9 @@
         <artifactId>maven-assembly-plugin</artifactId>
         <version>3.6.0</version>
         <configuration>
-          <descriptorRefs>
-            <descriptorRef>jar-with-dependencies</descriptorRef>
-          </descriptorRefs>
+          <descriptors>
+            <descriptor>assembly-nofx.xml</descriptor>
+          </descriptors>
           <archive>
             <manifest>
               <mainClass>smarthome.server.HomeServer</mainClass>

@@ -150,4 +150,7 @@ java -cp target/smarthome-sockets-1.0.0-jar-with-dependencies.jar smarthome.devi
 java -cp target/smarthome-sockets-1.0.0-jar-with-dependencies.jar smarthome.owner.OwnerClient
 
 # GUI owner (JavaFX – uses Maven classpath, not the fat jar)
+mvn -q package
+mvn -q javafx:run
+
 mvn -q javafx:run
