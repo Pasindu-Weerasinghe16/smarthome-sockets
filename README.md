@@ -154,3 +154,43 @@ mvn -q package
 mvn -q javafx:run
 
 mvn -q javafx:run
+
+---
+
+## Windows Setup & Run (C: clone)
+
+If you want to run everything on Windows (with normal mouse support for the JavaFX UI), first copy/clone the project to a regular Windows folder, for example:
+
+```powershell
+# One-time: copy from WSL to C:\Users\ASUS\smarthome-sockets
+Copy-Item -Recurse -Force "\\wsl$\Ubuntu\home\pasindu\OS_Project\smarthome-sockets" "C:\Users\ASUS\smarthome-sockets"
+```
+
+Then open a terminal in that folder and use these commands:
+
+```powershell
+cd C:\Users\ASUS\smarthome-sockets
+
+# Build once
+mvn -q package
+
+# Terminal 1 – Server on port 5000
+java -cp target/smarthome-sockets-1.0.0-jar-with-dependencies.jar `
+     smarthome.server.HomeServer 5000
+
+# Terminal 2 – Device (LIGHT_01)
+java -cp target/smarthome-sockets-1.0.0-jar-with-dependencies.jar `
+     smarthome.device.DeviceClient LIGHT_01
+
+# Terminal 3 – CLI owner (optional)
+java -cp target/smarthome-sockets-1.0.0-jar-with-dependencies.jar `
+     smarthome.owner.OwnerClient
+
+# Terminal 4 – JavaFX GUI owner (OwnerFxApp)
+mvn -q javafx:run
+```
+
+In the JavaFX window, keep **Host** = `127.0.0.1` and **Port** = `5000`, then click **Connect**.
+
+
+ cd "C:\Users\ASUS\smarthome-sockets"; java -cp target/smarthome-sockets-1.0.0-jar-with-dependencies.jar smarthome.server.HomeServer 5000
